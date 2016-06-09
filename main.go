@@ -17,7 +17,7 @@ var (
 func main() {
 	flag.Parse()
 
-	prometheus.MustRegister(Exporter{Location: *location, APIKey: *apiKey})
+	prometheus.MustRegister(&Exporter{Location: *location, APIKey: *apiKey})
 	log.Printf("Starting Server: %s", *listenAddress)
 	handler := prometheus.Handler()
 	http.Handle("/metrics", handler)

@@ -1,6 +1,27 @@
 package main
 
-import "github.com/prometheus/client_golang/prometheus"
+import (
+	"encoding/json"
+	"fmt"
+	"log"
+	"net/http"
+
+	"github.com/prometheus/client_golang/prometheus"
+)
+
+type result struct {
+	Main struct {
+		Temp     float64
+		Pressure float64
+		Humidity float64
+	}
+	Wind struct {
+		Speed float64
+	}
+	Clouds struct {
+		All float64
+	}
+}
 
 var (
 	temp = prometheus.NewGaugeVec(prometheus.GaugeOpts{
@@ -39,6 +60,19 @@ type Exporter struct {
 	APIKey   string
 }
 
+func (e *Exporter) owmData() (result, error) {
+	var res result
+	url := fmt.Sprintf("http://api.openweathermap.org/data/2.5/weather?q=%s&appid=%s&units=metric", e.Location, e.APIKey)
+	fmt.Println(url)
+	resp, err := http.Get(url)
+	if err != nil {
+		return res, err
+	}
+	dec := json.NewDecoder(resp.Body)
+	err = dec.Decode(&res)
+	return res, err
+}
+
 func (e *Exporter) Describe(ch chan<- *prometheus.Desc) {
 	temp.Describe(ch)
 	pressure.Describe(ch)
@@ -48,20 +82,24 @@ func (e *Exporter) Describe(ch chan<- *prometheus.Desc) {
 }
 
 func (e *Exporter) Collect(ch chan<- prometheus.Metric) {
-	res, err := owmResult(apiKey, location)
+	res, err := e.owmData()
+	if err != nil {
+		log.Printf("could not get results from OpenWeatherMap: %v", err)
+		return
+	}
 
-	temp.WithLabelValues(location).Set(res.Main.Temp)
+	temp.WithLabelValues(e.Location).Set(res.Main.Temp)
 	temp.Collect(ch)
 
-	pressure.WithLabelValues(location).Set(res.Main.Pressure)
+	pressure.WithLabelValues(e.Location).Set(res.Main.Pressure)
 	pressure.Collect(ch)
 
-	humidity.WithLabelValues(location).Set(res.Main.Humidity)
+	humidity.WithLabelValues(e.Location).Set(res.Main.Humidity)
 	humidity.Collect(ch)
 
-	wind.WithLabelValues(location).Set(res.Wind.Speed)
-	wind.Describe(ch)
+	wind.WithLabelValues(e.Location).Set(res.Wind.Speed)
+	wind.Collect(ch)
 
-	clouds.WithLabelValues(location).Set(res.Clouds.All)
-	clouds.Describe(ch)
+	clouds.WithLabelValues(e.Location).Set(res.Clouds.All)
+	clouds.Collect(ch)
 }
